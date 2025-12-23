@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::env;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 use std::io::{BufRead, BufReader};
 
 fn parse_temperature_line(line: &str) -> (String, f32) {
@@ -15,24 +16,27 @@ fn parse_temperature_line(line: &str) -> (String, f32) {
     (city, temperature)
 }
 
-fn print_results(station_stats: HashMap<String, StationStats>) {
+fn print_results(station_stats: HashMap<String, StationStats>, mut out_fd: &mut dyn Write) {
     let mut results = station_stats
         .into_iter()
         .map(|(key, value)| return (key, value))
         .collect::<Vec<(String, StationStats)>>();
     results.sort_by(|a, b| (a.0).cmp(&b.0));
 
-    print!("{{");
+    write!(&mut out_fd, "{{").expect("write to output file should suceed");
     for result in results {
-        print!(
+        write!(
+            &mut out_fd,
             "{}={}/{}/{}, ",
             result.0,
             result.1.min,
             result.1.sum / (result.1.count as f32),
             result.1.max,
-        );
+        )
+        .expect("write to output file should suceed");
     }
-    print!("}}");
+    write!(&mut out_fd, "}}").expect("write to output file should suceed");
+    println!("Write completed");
 }
 
 pub struct StationStats {
@@ -47,17 +51,14 @@ fn main() {
     let data_file = args
         .get(1)
         .expect("data file should be passed as an argument");
+    let out_file = args.get(2);
     println!("Running 1BRC on file {}", data_file);
 
     let mut station_stats: HashMap<String, StationStats> = HashMap::new();
 
     let file = File::open(data_file).expect("should be able to open file for reading");
     let reader = BufReader::new(file);
-    for (i, line) in reader.lines().enumerate() {
-        if i % 100000 == 0 {
-            println!("100000 line completed");
-        }
-
+    for line in reader.lines() {
         let line = line.expect("reading a line should always suceed");
         let (city, temperature) = parse_temperature_line(line.as_str());
 
@@ -77,5 +78,16 @@ fn main() {
             });
     }
 
-    print_results(station_stats);
+    if let Some(out_file) = out_file {
+        let mut out_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(false)
+            .open(out_file)
+            .expect("should be able to open out file for writing results");
+        print_results(station_stats, &mut out_file);
+    } else {
+        let mut out_file = std::io::stdout();
+        print_results(station_stats, &mut out_file);
+    };
 }
