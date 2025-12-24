@@ -4,6 +4,10 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::io::{BufRead, BufReader};
 
+use tracing_subscriber;
+use tracing_subscriber::fmt;
+use tracing_subscriber::fmt::format::FmtSpan;
+
 fn parse_temperature_line(line: &str) -> (String, f32) {
     let parts = line.split(";").collect::<Vec<&str>>();
     let city = parts.get(0).expect("should have the city part").to_string();
@@ -16,6 +20,7 @@ fn parse_temperature_line(line: &str) -> (String, f32) {
     (city, temperature)
 }
 
+#[tracing::instrument(skip_all)]
 fn print_results(station_stats: HashMap<String, StationStats>, mut out_fd: &mut dyn Write) {
     let mut results = station_stats
         .into_iter()
@@ -36,7 +41,6 @@ fn print_results(station_stats: HashMap<String, StationStats>, mut out_fd: &mut 
         .expect("write to output file should suceed");
     }
     write!(&mut out_fd, "}}").expect("write to output file should suceed");
-    println!("Write completed");
 }
 
 pub struct StationStats {
@@ -52,7 +56,13 @@ fn main() {
         .get(1)
         .expect("data file should be passed as an argument");
     let out_file = args.get(2);
+
     println!("Running 1BRC on file {}", data_file);
+    fmt::fmt()
+        .with_span_events(FmtSpan::CLOSE)
+        .with_target(false)
+        .with_level(false)
+        .init();
 
     let mut station_stats: HashMap<String, StationStats> = HashMap::new();
 
