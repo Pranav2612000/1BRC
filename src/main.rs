@@ -4,6 +4,8 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::io::{BufRead, BufReader};
 
+use tracing::span;
+use tracing::Level;
 use tracing_subscriber;
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -63,6 +65,8 @@ fn main() {
         .with_target(false)
         .with_level(false)
         .init();
+    let program_span = span!(Level::INFO, "program");
+    let program_span_guard = program_span.enter();
 
     let mut station_stats: HashMap<String, StationStats> = HashMap::new();
 
@@ -100,4 +104,6 @@ fn main() {
         let mut out_file = std::io::stdout();
         print_results(station_stats, &mut out_file);
     };
+
+    drop(program_span_guard);
 }
