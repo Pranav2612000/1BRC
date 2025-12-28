@@ -73,10 +73,17 @@ fn main() {
     let mut station_stats: HashMap<String, StationStats> = HashMap::new();
 
     let file = File::open(data_file).expect("should be able to open file for reading");
-    let reader = BufReader::with_capacity(DEFAULT_BUFFER_SIZE, file);
-    for line in reader.lines() {
-        let line = line.expect("reading a line should always suceed");
-        let (city, temperature) = parse_temperature_line(line.as_str());
+    let mut reader = BufReader::with_capacity(DEFAULT_BUFFER_SIZE, file);
+    let mut line = String::new();
+    loop {
+        let line_len = reader
+            .read_line(&mut line)
+            .expect("reading a line should always succeed");
+        if line_len == 0 {
+            break;
+        }
+        let (city, temperature) = parse_temperature_line(&line.as_str()[0..line_len - 1]);
+        line.clear();
 
         station_stats
             .entry(city)
