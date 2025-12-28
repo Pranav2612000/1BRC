@@ -1,2 +1,3 @@
 description,time_for_1000,time_for_1000000,time_for_1000000000
-first-version,0.03,0.65,604.12
+'first-version',0.03,0.65,604.12
+'increase buffer size while reading to 16MB',0.018,1.29,587

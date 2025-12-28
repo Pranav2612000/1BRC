@@ -10,6 +10,8 @@ use tracing_subscriber;
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::format::FmtSpan;
 
+const DEFAULT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+
 fn parse_temperature_line(line: &str) -> (String, f32) {
     let parts = line.split(";").collect::<Vec<&str>>();
     let city = parts.get(0).expect("should have the city part").to_string();
@@ -71,7 +73,7 @@ fn main() {
     let mut station_stats: HashMap<String, StationStats> = HashMap::new();
 
     let file = File::open(data_file).expect("should be able to open file for reading");
-    let reader = BufReader::new(file);
+    let reader = BufReader::with_capacity(DEFAULT_BUFFER_SIZE, file);
     for line in reader.lines() {
         let line = line.expect("reading a line should always suceed");
         let (city, temperature) = parse_temperature_line(line.as_str());

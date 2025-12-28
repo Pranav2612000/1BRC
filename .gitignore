@@ -1,3 +1,4 @@
 /target
 *.swp
 data/out.txt
+data/out_*.txt
