@@ -1,2 +1,3 @@
 - Compile with -o flags
 - Implement custom queue instead of crossbeam
+- Figure out why 4 threads is faster than 8 threads on a 10 core machine
