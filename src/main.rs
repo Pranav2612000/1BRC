@@ -11,6 +11,7 @@ use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 const DEFAULT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+const CHANNEL_SIZE: usize = 2 * 1024 * 1024;
 
 fn parse_temperature_line(line: &str) -> (String, f32) {
     let parts = line.split(";").collect::<Vec<&str>>();
@@ -58,7 +59,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let data_file = args
         .get(1)
-        .expect("data file should be passed as an argument");
+        .expect("data file should be passed as an argument")
+        .clone();
     let out_file = args.get(2);
 
     println!("Running 1BRC on file {}", data_file);
@@ -70,21 +72,31 @@ fn main() {
     let program_span = span!(Level::INFO, "program");
     let program_span_guard = program_span.enter();
 
+    let (sender, receiver) = crossbeam_channel::bounded::<String>(CHANNEL_SIZE);
     let mut station_stats: HashMap<String, StationStats> = HashMap::new();
 
-    let file = File::open(data_file).expect("should be able to open file for reading");
-    let mut reader = BufReader::with_capacity(DEFAULT_BUFFER_SIZE, file);
-    let mut line = String::new();
-    loop {
-        let line_len = reader
-            .read_line(&mut line)
-            .expect("reading a line should always succeed");
-        if line_len == 0 {
-            break;
-        }
-        let (city, temperature) = parse_temperature_line(&line.as_str()[0..line_len - 1]);
-        line.clear();
+    let producer_handle = std::thread::spawn(move || {
+        let file = File::open(data_file).expect("should be able to open file for reading");
+        let mut reader = BufReader::with_capacity(DEFAULT_BUFFER_SIZE, file);
 
+        let mut line = String::new();
+        loop {
+            let line_len = reader
+                .read_line(&mut line)
+                .expect("reading a line should always succeed");
+            if line_len == 0 {
+                drop(sender);
+                break;
+            }
+            sender
+                .send((line.as_str()[0..line_len - 1]).to_string())
+                .expect("send should succeed");
+            line.clear();
+        }
+    });
+
+    for line in receiver.iter() {
+        let (city, temperature) = parse_temperature_line(line.as_str());
         station_stats
             .entry(city)
             .and_modify(|stats| {
