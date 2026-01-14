@@ -1,1 +1,2 @@
 - Compile with -o flags
+- Implement custom queue instead of crossbeam
