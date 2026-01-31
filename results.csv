@@ -3,3 +3,4 @@ description,time_for_1000,time_for_1000000,time_for_1000000000
 'increase buffer size while reading to 16MB',0.018,1.29,587
 'use single allocation for line',1.26,1.22,519
 'multi-threaded',0.046,1.11,244
+'build optimizations',0.021,0.797,98
