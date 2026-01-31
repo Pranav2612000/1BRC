@@ -160,7 +160,7 @@ fn main() {
         let mut out_file = OpenOptions::new()
             .create(true)
             .write(true)
-            .append(false)
+            .truncate(true)
             .open(out_file)
             .expect("should be able to open out file for writing results");
         print_results(station_stats, &mut out_file);
