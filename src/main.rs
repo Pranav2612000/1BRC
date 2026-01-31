@@ -12,7 +12,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 const DEFAULT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 const CHANNEL_SIZE: usize = 2 * 1024 * 1024;
-const DEFAULT_NUM_THREADS: usize = 4;
+const DEFAULT_NUM_THREADS: usize = 3;
 
 fn parse_temperature_line(line: &str) -> (String, f32) {
     let parts = line.split(";").collect::<Vec<&str>>();
