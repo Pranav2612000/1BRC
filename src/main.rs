@@ -34,11 +34,10 @@ fn print_results(station_stats: HashMap<String, StationStats>, mut out_fd: &mut 
         .collect::<Vec<(String, StationStats)>>();
     results.sort_by(|a, b| (a.0).cmp(&b.0));
 
-    write!(&mut out_fd, "{{").expect("write to output file should suceed");
     for result in results {
         write!(
             &mut out_fd,
-            "{}={}/{}/{}, ",
+            "{}={}/{}/{}\n",
             result.0,
             result.1.min,
             result.1.sum / (result.1.count as f32),
@@ -46,7 +45,6 @@ fn print_results(station_stats: HashMap<String, StationStats>, mut out_fd: &mut 
         )
         .expect("write to output file should suceed");
     }
-    write!(&mut out_fd, "}}").expect("write to output file should suceed");
 }
 
 #[derive(Clone)]
