@@ -14,6 +14,27 @@ const DEFAULT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 const CHANNEL_SIZE: usize = 2 * 1024 * 1024;
 const DEFAULT_NUM_THREADS: usize = 3;
 
+use memchr::memchr_iter;
+
+fn split_newline_simd(text: &str) -> Vec<&str> {
+    let bytes = text.as_bytes();
+    let mut results = Vec::new();
+    let mut last_pos = 0;
+
+    // memchr_iter finds all occurrences of '\n' (0x0A) using SIMD
+    for pos in memchr_iter(b'\n', bytes) {
+        results.push(&text[last_pos..pos]);
+        last_pos = pos + 1;
+    }
+
+    // Push the last remaining part
+    if last_pos <= bytes.len() {
+        results.push(&text[last_pos..]);
+    }
+
+    results
+}
+
 fn parse_temperature_line(line: &str) -> (String, f32) {
     let parts = line.split(";").collect::<Vec<&str>>();
     let city = parts.get(0).expect("should have the city part").to_string();
@@ -152,7 +173,7 @@ fn main() {
         let handle = std::thread::spawn(move || {
             let mut station_stats: HashMap<String, StationStats> = HashMap::new();
             for lines in rx.iter() {
-                let lines = lines.split("\n");
+                let lines = split_newline_simd(lines.as_str());
                 for line in lines {
                     let (city, temperature) = parse_temperature_line(&line);
                     station_stats

@@ -1,3 +1,3 @@
-- Compile with -o flags
 - Implement custom queue instead of crossbeam
-- Figure out why 4 threads is faster than 8 threads on a 10 core machine
+- Implement custom SIMD functions instead of memchr
+- Work with u8 directly instead of converting to string in reader thread
