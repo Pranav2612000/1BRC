@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
-use std::io::{BufRead, BufReader};
+use std::io::{BufReader, Read};
 
 use tracing::span;
 use tracing::Level;
@@ -83,10 +83,9 @@ fn main() {
         .expect("data file should be passed as an argument")
         .clone();
     let out_file = args.get(2);
-    let num_threads = DEFAULT_NUM_THREADS;
-    // let num_threads = std::thread::available_parallelism()
-    //     .map(|s| s.get() - 4)
-    //     .unwrap_or(DEFAULT_NUM_THREADS);
+    let num_threads = std::thread::available_parallelism()
+        .map(|s| s.get() - 1)
+        .unwrap_or(DEFAULT_NUM_THREADS);
 
     println!(
         "Running 1BRC on file {} with {} threads",
@@ -107,19 +106,43 @@ fn main() {
         let file = File::open(data_file).expect("should be able to open file for reading");
         let mut reader = BufReader::with_capacity(DEFAULT_BUFFER_SIZE, file);
 
-        let mut line = String::new();
+        let mut buffer = vec![0u8; DEFAULT_BUFFER_SIZE];
+        let mut leftover = Vec::new();
+
         loop {
-            let line_len = reader
-                .read_line(&mut line)
-                .expect("reading a line should always succeed");
-            if line_len == 0 {
+            let bytes_read = reader
+                .read(&mut buffer)
+                .expect("reading should always succeed");
+
+            if bytes_read == 0 {
+                // Send any remaining leftover data
+                if !leftover.is_empty() {
+                    let chunk = String::from_utf8_lossy(&leftover).to_string();
+                    sender.send(chunk).expect("send should succeed");
+                }
                 drop(sender);
                 break;
             }
-            sender
-                .send((line.as_str()[0..line_len - 1]).to_string())
-                .expect("send should succeed");
-            line.clear();
+
+            // Find the last newline in the current buffer
+            let last_newline_pos = buffer[0..bytes_read].iter().rposition(|&b| b == b'\n');
+
+            if let Some(pos) = last_newline_pos {
+                // Combine leftover from previous read with data up to (but not including) the last newline
+                let mut chunk_data = leftover.clone();
+                chunk_data.extend_from_slice(&buffer[0..pos]);
+
+                // Convert to string and send
+                let chunk = String::from_utf8_lossy(&chunk_data).to_string();
+                sender.send(chunk).expect("send should succeed");
+
+                // Save the data after the last newline for the next iteration
+                leftover.clear();
+                leftover.extend_from_slice(&buffer[pos + 1..bytes_read]);
+            } else {
+                // No newline found in this chunk, add everything to leftover
+                leftover.extend_from_slice(&buffer[0..bytes_read]);
+            }
         }
     });
 
@@ -128,22 +151,25 @@ fn main() {
         let rx = receiver.clone();
         let handle = std::thread::spawn(move || {
             let mut station_stats: HashMap<String, StationStats> = HashMap::new();
-            for line in rx.iter() {
-                let (city, temperature) = parse_temperature_line(line.as_str());
-                station_stats
-                    .entry(city)
-                    .and_modify(|stats| {
-                        stats.count = stats.count + 1;
-                        stats.sum = stats.sum + temperature;
-                        stats.max = f32::max(stats.max, temperature);
-                        stats.min = f32::min(stats.min, temperature);
-                    })
-                    .or_insert(StationStats {
-                        min: temperature,
-                        sum: temperature,
-                        max: temperature,
-                        count: 1,
-                    });
+            for lines in rx.iter() {
+                let lines = lines.split("\n");
+                for line in lines {
+                    let (city, temperature) = parse_temperature_line(&line);
+                    station_stats
+                        .entry(city.clone())
+                        .and_modify(|stats| {
+                            stats.count = stats.count + 1;
+                            stats.sum = stats.sum + temperature;
+                            stats.max = f32::max(stats.max, temperature);
+                            stats.min = f32::min(stats.min, temperature);
+                        })
+                        .or_insert(StationStats {
+                            min: temperature,
+                            sum: temperature,
+                            max: temperature,
+                            count: 1,
+                        });
+                }
             }
 
             return station_stats;
