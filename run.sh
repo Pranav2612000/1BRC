@@ -1,1 +1,1 @@
-cargo run data/out.txt data/results.txt
+cargo run --release data/out.txt data/results.txt
