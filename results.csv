@@ -6,3 +6,5 @@ description,time_for_1000,time_for_1000000,time_for_1000000000
 'build optimizations',0.021,0.797,98
 'run with 3 threads',0.020,0.815,82
 'multithreaded parsing with max threads',0.018,0.637,26.5
+'SIMD for splitting on newlines',0.018,0.637,26.5
+'Faster parsing of each line',0.019,0.615,25.1

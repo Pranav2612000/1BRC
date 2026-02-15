@@ -35,16 +35,71 @@ fn split_newline_simd(text: &str) -> Vec<&str> {
     results
 }
 
-fn parse_temperature_line(line: &str) -> (String, f32) {
-    let parts = line.split(";").collect::<Vec<&str>>();
-    let city = parts.get(0).expect("should have the city part").to_string();
-    let temperature = parts
-        .get(1)
-        .expect("should have temperature part")
-        .parse::<f32>()
-        .expect("temperature should be f32 parseable");
+/// SIMD accelerated parsing of temperature lines
+/// Format: "City;Temperature" -> (City, Temperature)
+fn parse_temperature_line_simd(line: &str) -> (String, f32) {
+    let bytes = line.as_bytes();
 
-    (city, temperature)
+    // Use memchr (SIMD accelerated) to find the semicolon separator
+    let semicolon_pos = memchr::memchr(b';', bytes)
+        .expect("line should contain semicolon separator");
+
+    // Extract city (before semicolon)
+    let city = &line[..semicolon_pos];
+
+    // Extract temperature string (after semicolon)
+    let temp_str = &line[semicolon_pos + 1..];
+
+    // Parse temperature - using fast_float for better performance
+    let temperature = fast_parse_float(temp_str);
+
+    (city.to_string(), temperature)
+}
+
+/// Fast floating point parser optimized for the 1BRC format
+/// Handles format: [-]DD.D where D is a digit
+#[inline]
+fn fast_parse_float(s: &str) -> f32 {
+    let bytes = s.as_bytes();
+    let mut result = 0.0f32;
+    let mut negative = false;
+    let mut idx = 0;
+
+    // Check for negative sign
+    if bytes[idx] == b'-' {
+        negative = true;
+        idx += 1;
+    }
+
+    // Parse integer part (before decimal point)
+    while idx < bytes.len() && bytes[idx] != b'.' {
+        result = result * 10.0 + (bytes[idx] - b'0') as f32;
+        idx += 1;
+    }
+
+    // Skip decimal point
+    if idx < bytes.len() && bytes[idx] == b'.' {
+        idx += 1;
+    }
+
+    // Parse fractional part (after decimal point)
+    let mut divisor = 10.0f32;
+    while idx < bytes.len() {
+        result += (bytes[idx] - b'0') as f32 / divisor;
+        divisor *= 10.0;
+        idx += 1;
+    }
+
+    if negative {
+        -result
+    } else {
+        result
+    }
+}
+
+// Keep the old function for backward compatibility if needed
+fn parse_temperature_line(line: &str) -> (String, f32) {
+    parse_temperature_line_simd(line)
 }
 
 #[tracing::instrument(skip_all)]
@@ -120,7 +175,7 @@ fn main() {
     let program_span = span!(Level::INFO, "program");
     let program_span_guard = program_span.enter();
 
-    let (sender, receiver) = crossbeam_channel::bounded::<String>(CHANNEL_SIZE);
+    let (sender, receiver) = crossbeam_channel::bounded::<Vec<u8>>(CHANNEL_SIZE);
     let mut station_stats: HashMap<String, StationStats> = HashMap::new();
 
     std::thread::spawn(move || {
@@ -138,8 +193,7 @@ fn main() {
             if bytes_read == 0 {
                 // Send any remaining leftover data
                 if !leftover.is_empty() {
-                    let chunk = String::from_utf8_lossy(&leftover).to_string();
-                    sender.send(chunk).expect("send should succeed");
+                    sender.send(leftover).expect("send should succeed");
                 }
                 drop(sender);
                 break;
@@ -154,8 +208,7 @@ fn main() {
                 chunk_data.extend_from_slice(&buffer[0..pos]);
 
                 // Convert to string and send
-                let chunk = String::from_utf8_lossy(&chunk_data).to_string();
-                sender.send(chunk).expect("send should succeed");
+                sender.send(chunk_data).expect("send should succeed");
 
                 // Save the data after the last newline for the next iteration
                 leftover.clear();
@@ -173,6 +226,7 @@ fn main() {
         let handle = std::thread::spawn(move || {
             let mut station_stats: HashMap<String, StationStats> = HashMap::new();
             for lines in rx.iter() {
+                let lines = String::from_utf8_lossy(&lines).to_string();
                 let lines = split_newline_simd(lines.as_str());
                 for line in lines {
                     let (city, temperature) = parse_temperature_line(&line);
